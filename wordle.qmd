@@ -1,0 +1,187 @@
+---
+title: "wordle"
+author: "Sai Tokmurzina"
+format: html
+editor: visual
+---
+
+## Quarto
+
+# STEP 1
+
+#### Here I create a custom function to load my dictionaries. I utilise {tidyverse} read_csv(), with filename as my argument. Then, I load my two dictionaries "collins" as my valid_list and "google" as solution_list.
+
+```{r}
+load_dictionary <- function(filename) {
+  library(tidyverse)
+  read_file <- read_csv(filename, col_names = TRUE)
+  } 
+```
+
+```{r}
+collins <- "https://raw.githubusercontent.com/difiore/ada-datasets/refs/heads/main/collins-scrabble-words-2019.txt" ## valid
+google <- "https://raw.githubusercontent.com/difiore/ada-datasets/refs/heads/main/google-10000-english-usa-no-swears.txt" ## solution 
+```
+
+```{r}
+valid_list <- load_dictionary(collins)
+solution_list <- load_dictionary(google)
+```
+
+```{r}
+str(valid_list)
+str(solution_list)
+```
+
+#### Both dictionaries are data frames, I transform them into characters for easy data handling in the next steps (i.e., valid_list \<- valid_list\$words, etc)
+
+```{r}
+valid_list <- valid_list$words
+solution_list <- solution_list$words
+```
+
+# STEP 2
+
+#### Here I must must winnow "solution_list" (my smaller dictionary of words) to match words in the "valid_list" (my bigger dictionary). I use intersect(x, y) --\> x and y arguments are vectors of the same mode. In the previous step I already trnasformed valid_list and solution_list into charachter vectors.
+
+```{r}
+solution_list <-  intersect(solution_list, valid_list)
+str(solution_list)
+```
+
+### solution_list now contains 8336 words.
+
+# STEP 3:
+
+# My custom solution function
+
+#### I create another custom function, which helps me to keep words of desired length (5 in default). One of the kept words is randomly selected (random_word) -- that is the word I will try to guess playing wordle. It is crucial to split random_word into charachters, which will let me give feedback on each character in the next steps.
+
+```{r}
+pick_solution <- function(x, word_length = 5) {
+  words_bank <- x[nchar(x) == word_length]
+  random_word <- sample(words_bank, size = 1)
+  split_characters <- strsplit(random_word, split = "") [[1]]
+  return(split_characters)
+}
+```
+
+# STEP 4:
+
+# Establishing evaluate_guess function
+
+#### This is my feedback function, which I call later in the play_wordle function. Initially, I assume that all guess charachters arenincorrect (-), but when a correct charachter appears the feedback changes: "-" turns into "+" for correct letters at wrong positions, while "*" signals correct word, correct position.
+
+```{r}
+evaluate_guess <- function(guess_letters, solution) {
+  result <- rep("-", length(solution))
+  remaining_solution_letters <- solution
+  
+  ## correct positon and word 
+  for (i in 1:length(solution)) {
+    if (guess_letters[i] == solution[i]) {
+      result[i] <- "*"
+      remaining_solution_letters[i] <- NA
+    }
+  }
+  
+  ## correct letter, wrong position
+  for (i in 1:length(solution)) {
+    if (result[i] == "-" && guess_letters[i] %in% remaining_solution_letters) {
+      result[i] <- "+"
+      match_letters <- match(guess_letters[i],remaining_solution_letters)
+      remaining_solution_letters[match_letters] <- NA
+    }
+  }
+  
+  return(result) 
+}
+
+```
+
+# Establishing the play wordle function
+#### This is my main function that gamefies this code. The arguments are the correct wordle word (solution), my bank of valid words (valid_list) and number of guesses set to 6 (by default, but could be changed) 
+#### First, I print greetings and rules (i.e., having 6 guesses, words need to be 5 letters in length). Then, I make sure the code spots invalid answers and re-tries the game -- (a) wrong length words, (b) gibberish/ non-existent words in my valid_list of words. These intaractions are enabled by readline(). I call evaluate_guess here and print outcome. If the player wins in 6 or less guesses -- the game ends in victory, otherwise it's game over!
+
+```{r}
+play_wordle <- function(solution, valid_list, num_guesses=6) {
+  
+  cat("Welcome to the game of Wordle!\n")
+  word_length <- length(solution)
+  cat("You have ",num_guesses, " chances to guess a word of length ", word_length)
+  
+  letters_left <- LETTERS
+  
+  history_of_guesses <- list()
+  history_of_results <- list()
+  
+  for (i in 1:num_guesses) {
+    
+    cat(". Your availible letters: ", letters_left)
+    
+    guess <- readline(paste("Enter guess number ", i, " :"))
+    guess <- toupper(guess)
+    
+    while (nchar(guess) != word_length) {
+      guess <- readline(paste("This guess is invalid.\n Words shoud be ", word_length," in length.\n Enter guess number", i, " again: "))
+      guess <- toupper(guess)
+    }
+    
+    while (!(guess %in% valid_list)) {
+      guess <- readline(paste("This guess is invalid.\n This word is not in my database.\n Enter guess number", i, " again: "))
+      guess <- toupper(guess)
+    }
+    
+    ###############################################
+    
+    guess_letters <- strsplit(guess, "")[[1]]
+    
+    call_evaluate <- evaluate_guess(guess_letters, solution)
+    history_of_guesses[[i]] <- guess_letters
+    history_of_results[[i]] <- call_evaluate
+    cat("Your result:", call_evaluate, ", \n where * = correct letter and position, \n + = correct word, wrong position, \n - = wrong altogether")
+    
+    letters_left <- setdiff(letters_left, guess_letters)
+    
+    if (all(call_evaluate == "*")) {
+      cat("YOU WON! \n")
+      for (j in seq_along(history_of_guesses)) {
+        cat(
+          paste(history_of_guesses[[j]], collapse = ""),
+          ":", paste(history_of_results[[j]], collapse = "")
+        )
+      }
+      return(invisible(TRUE))
+    }
+    
+  }  # closes the for loop
+  
+  cat("Game Over! \n")
+  cat("The correct word:",
+      paste(solution, collapse = ""))
+  
+  for (j in 1:length(history_of_guesses)) {
+    cat(
+      paste(history_of_guesses[[j]], collapse = ""),
+      ":", paste(history_of_results[[j]], collapse = "")
+    )
+  }
+  
+  invisible(FALSE)
+  
+}  
+  
+```
+
+# PLAY WORDLE
+
+#### Time to play! I call pick_solution function to randomly choose my wordle word (the word is unknown to me until I win or lose), then call play_wordle to start the game and try guessing the word in 6 attempts. 
+
+```{r}
+#| eval: false
+solution <- pick_solution(solution_list, word_length = 5)
+print(solution)
+
+game <- play_wordle(solution, valid_list, num_guesses = 6)
+```
+
